@@ -278,13 +278,34 @@ export function buildDesk(brand: { mono: string; name: string }): DeskScene {
   const plant = new THREE.Group();
   plant.position.set(-1.05, 0, 0.05);
   root.add(plant);
-  plant.add(mesh(new THREE.CylinderGeometry(0.12, 0.09, 0.24, 40), std('#f1efea', 0.6), [0, 0.12, 0]));
-  plant.add(mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.01, 32), std('#3b2a1e', 1), [0, 0.235, 0]));
+  // Open-topped pot (a closed lid sat exactly on the soil's top face and z-fought with it).
+  const potMat = std('#f1efea', 0.6);
+  plant.add(mesh(new THREE.CylinderGeometry(0.12, 0.09, 0.24, 40, 1, true), potMat, [0, 0.12, 0]));
+  // Inner wall: back faces of a slightly smaller shell, so the outer wall keeps clean single-sided shadows.
+  plant.add(mesh(new THREE.CylinderGeometry(0.116, 0.087, 0.24, 40, 1, true), std('#e4e1da', 0.7, 0, { side: THREE.BackSide }), [0, 0.12, 0], { cast: false }));
+  const potBase = mesh(new THREE.CircleGeometry(0.09, 40), potMat, [0, 0.001, 0]);
+  potBase.rotation.x = -Math.PI / 2;
+  plant.add(potBase);
+  const rim = mesh(new THREE.TorusGeometry(0.12, 0.005, 8, 48), potMat, [0, 0.24, 0]);
+  rim.rotation.x = Math.PI / 2;
+  plant.add(rim);
+  // Soil sits 2 cm below the rim, just inside the inner wall (r ≈ 0.1136 at that height) so it never pokes through.
+  const SOIL_Y = 0.22;
+  plant.add(mesh(new THREE.CylinderGeometry(0.112, 0.112, 0.01, 40), std('#3b2a1e', 1), [0, SOIL_Y - 0.005, 0]));
   const leafMats = [std('#3f7a3a', 0.6, 0, { side: THREE.DoubleSide }), std('#5c9a45', 0.6, 0, { side: THREE.DoubleSide }), std('#2f5f30', 0.6, 0, { side: THREE.DoubleSide })];
+  // The desk's drawer pedestal starts 0.27 m to the plant's +x; leaves heading that way must stop short of it.
+  const MAX_REACH_TOWARDS_DESK = 0.22;
   const pr = rng(21);
   for (let i = 0; i < 30; i++) {
+    // Same random sequence as before (len, lean, yaw, tilt) so every leaf keeps its look.
     const len = 0.45 + pr() * 0.45;
-    const lean = 0.15 + pr() * 0.6;
+    let lean = 0.15 + pr() * 0.6;
+    const yaw = pr() * Math.PI * 2;
+    const tilt = (pr() - 0.5) * 0.15;
+    const towardsDesk = Math.cos(yaw); // world +x component of the leaf's direction
+    if (towardsDesk > 0 && Math.sin(lean) * len * towardsDesk > MAX_REACH_TOWARDS_DESK) {
+      lean = Math.asin(MAX_REACH_TOWARDS_DESK / (len * towardsDesk));
+    }
     const pts: THREE.Vector3[] = [];
     for (let s = 0; s <= 10; s++) {
       const t = s / 10;
@@ -305,9 +326,9 @@ export function buildDesk(brand: { mono: string; name: string }): DeskScene {
     geo.setAttribute('position', new THREE.Float32BufferAttribute(verts, 3));
     geo.setIndex(idx);
     geo.computeVertexNormals();
-    const leaf = mesh(geo, leafMats[i % 3], [0, 0.23, 0]);
-    leaf.rotation.y = pr() * Math.PI * 2;
-    leaf.rotation.x = (pr() - 0.5) * 0.15;
+    const leaf = mesh(geo, leafMats[i % 3], [0, SOIL_Y, 0]);
+    leaf.rotation.y = yaw;
+    leaf.rotation.x = tilt;
     plant.add(leaf);
   }
 
